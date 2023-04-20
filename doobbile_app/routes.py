@@ -1,33 +1,17 @@
 import os
 import secrets
-from flask import render_template, url_for, flash, redirect, request
+from flask import render_template, url_for, flash, redirect, request, abort
 from doobbile_app import app, db, bcrypt
-from doobbile_app.forms import RegistrationForm, LoginForm, UpdateAccountForm
+from doobbile_app.forms import RegistrationForm, LoginForm, UpdateAccountForm, PostForm
 from doobbile_app.models import User, Post
 from flask_login import login_user, current_user, logout_user, login_required
 from PIL import Image
-
-posts = [
-    {
-        "author": "Javier Vargas",
-        "title": "Doobbile Post 1",
-        "content": "This would be the SVG",
-        "caption": "This is my drawing",
-        "date_posted": "March 31, 2018"
-    },
-    {
-        "author": "John Mackland",
-        "title": "Doobbile Post 2",
-        "content": "This would be the SVG",
-        "caption": "This is my animal drawing",
-        "date_posted": "March 31, 2018"
-    }
-]
 
 
 @app.route("/")
 @app.route("/home")
 def home():
+    posts = Post.query.all()
     return render_template("home.html", posts=posts)
 
 
@@ -79,7 +63,8 @@ def save_picture(form_picture):
     random_hex = secrets.token_hex(8)
     _, f_ext = os.path.splitext(form_picture.filename)
     picture_fn = random_hex + f_ext
-    picture_path = os.path.join(app.root_path, 'static/profile_pics', picture_fn)
+    picture_path = os.path.join(
+        app.root_path, 'static/profile_pics', picture_fn)
     form_picture.save(picture_path)
 
     if f_ext == 'svg':
@@ -107,6 +92,59 @@ def account():
     elif request.method == 'GET':
         form.username.data = current_user.username
         form.email.data = current_user.email
-    image_file = url_for('static', filename='profile_pics/' + current_user.image_file)
+    image_file = url_for(
+        'static', filename='profile_pics/' + current_user.image_file)
     return render_template('account.html', title='Account',
                            image_file=image_file, form=form)
+
+
+@app.route("/post/new", methods=['GET', 'POST'])
+@login_required
+def new_doobbile():
+    form = PostForm()
+    if form.validate_on_submit():
+        post = Post(title=form.title.data,
+                    content=form.content.data, author=current_user)
+        db.session.add(post)
+        db.session.commit()
+        flash("Your post has been created!", "success")
+        return redirect(url_for('home'))
+
+    return render_template('create_doobbile.html', title='Create', form=form, legend='Create Doobbile')
+
+
+@app.route("/post/<int:post_id>")
+def doobbile(post_id):
+    post = Post.query.get_or_404(post_id)
+    return render_template('doobbile.html', title=post.title, post=post)
+
+
+@app.route("/post/<int:post_id>/update", methods=['GET', 'POST'])
+@login_required
+def update_doobbile(post_id):
+    post = Post.query.get_or_404(post_id)
+    if post.author != current_user:
+        abort(403)
+    form = PostForm()
+    if form.validate_on_submit():
+        post.title = form.title.data
+        post.content = form.content.data
+        db.session.commit()
+        flash('Your Doobbile has been updated!', 'success')
+        return redirect(url_for('doobbile', post_id=post.id))
+    elif request.method == 'GET':
+        form.title.data = post.title
+        form.content.data = post.content
+    return render_template('create_doobbile.html', title='Update Doobbile', form=form, legend='Update Doobbile')
+
+
+@app.route("/post/<int:post_id>/delete", methods=['POST'])
+@login_required
+def delete_doobbile(post_id):
+    post = Post.query.get_or_404(post_id)
+    if post.author != current_user:
+        abort(403)
+    db.session.delete(post)
+    db.session.commit()
+    flash('Your Doobbile has been deleted', 'success')
+    return redirect(url_for('home'))
