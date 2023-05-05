@@ -1,5 +1,6 @@
 from datetime import datetime, timezone, timedelta
-from doobbile_app import db, login_manager, app
+from flask import current_app
+from doobbile_app import db, login_manager
 from flask_login import UserMixin
 import jwt
 
@@ -21,13 +22,15 @@ class User(db.Model, UserMixin):
 
     # JWT
     def get_reset_token(self, expired_sec=1800):
-        s = jwt.encode({'exp':datetime.now(tz=timezone.utc) + timedelta(seconds=expired_sec), 'user_id':self.id}, app.config['SECRET_KEY'], algorithm='HS256')
+        s = jwt.encode({'exp': datetime.now(tz=timezone.utc) + timedelta(seconds=expired_sec),
+                       'user_id': self.id}, current_app.config['SECRET_KEY'], algorithm='HS256')
         return s
 
     @staticmethod
     def verify_reset_token(token):
         try:
-            s = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
+            s = jwt.decode(
+                token, current_app.config['SECRET_KEY'], algorithms=['HS256'])
             user_id = s['user_id']
         except:
             return None
